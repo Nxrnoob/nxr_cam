@@ -406,9 +406,12 @@
       recordingSeconds += 1
     }, 1000)
 
-    autoStopTimeout = window.setTimeout(() => {
-      void stopRecording()
-    }, maxVideoSeconds * 1000)
+    const limitMs = maxVideoSeconds * 1000
+    console.log('[CAM] Auto-stop set for', maxVideoSeconds, 'seconds')
+    autoStopTimeout = window.setTimeout(async () => {
+      console.log('[CAM] Auto-stop timeout triggered')
+      await stopRecording()
+    }, limitMs)
   }
 
   async function startRecording() {
@@ -438,10 +441,15 @@
     }
 
     recorder.onstop = () => {
+      console.log('[CAM] recorder.onstop fired, isRecording was:', isRecording)
+      const wasRecording = isRecording
       clearRecordingTimers()
       isRecording = false
 
-      if (recordedChunks.length === 0) return
+      if (!wasRecording || recordedChunks.length === 0) {
+        console.log('[CAM] onstop: not processing')
+        return
+      }
 
       const finalMime = recorder?.mimeType || (fallbackMimeUsed ? 'video/webm' : 'video/mp4')
       const blob = new Blob(recordedChunks, { type: finalMime })
@@ -468,13 +476,26 @@
   }
 
   async function stopRecording() {
-    console.log('[CAM] stopRecording called, recorder:', !!recorder, 'isRecording:', isRecording)
-    if (!recorder || !isRecording) {
-      console.log('[CAM] stopRecording early return')
+    console.log('[CAM] stopRecording called, recorder state:', !!recorder, 'isRecording:', isRecording)
+    
+    if (!recorder) {
+      console.log('[CAM] No recorder, forcing stop')
+      isRecording = false
+      clearRecordingTimers()
       return
     }
+    
+    if (!isRecording) {
+      console.log('[CAM] Not recording, forcing stop')
+      isRecording = false
+      clearRecordingTimers()
+      return
+    }
+    
+    console.log('[CAM] Calling recorder.stop()')
     recorder.stop()
-    console.log('[CAM] recorder.stop() called')
+    clearRecordingTimers()
+    isRecording = false
   }
 
   async function toggleRecording() {
@@ -683,6 +704,7 @@
 
 <main class="app">
   {#if bootState === 'ready'}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
       class="camera-shell"
       ontouchstart={handleTouchStart}
